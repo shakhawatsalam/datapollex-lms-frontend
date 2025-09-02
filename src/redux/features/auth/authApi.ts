@@ -1,5 +1,6 @@
 import baseApi from "@/redux/baseApi";
-import { getStoredToken } from "@/utils/tokenStorage";
+import { tagTypes } from "@/redux/tag-types";
+import { storeToken, getStoredToken, clearToken } from "@/utils/tokenStorage";
 
 type RegisterCredentials = {
   email: string;
@@ -39,9 +40,14 @@ type UserInfo = {
       updatedAt: string;
       __v: number;
     };
-    accessToken?: string; 
+    accessToken?: string;
   };
   meta: Record<string, any>;
+};
+
+type LogoutResponse = {
+  success: boolean;
+  message: string;
 };
 
 const authApi = baseApi.injectEndpoints({
@@ -52,6 +58,13 @@ const authApi = baseApi.injectEndpoints({
         method: "POST",
         body: credentials,
       }),
+      transformResponse: (response: UserInfo) => {
+        if (response.data.accessToken) {
+          storeToken(response.data.accessToken);
+        }
+        return response;
+      },
+      invalidatesTags: [tagTypes.profile],
     }),
     loginUser: builder.mutation<UserInfo, LoginCredentials>({
       query: (credentials) => ({
@@ -59,12 +72,26 @@ const authApi = baseApi.injectEndpoints({
         method: "POST",
         body: credentials,
       }),
+      transformResponse: (response: UserInfo) => {
+        if (response.data.accessToken) {
+          storeToken(response.data.accessToken);
+        }
+        return response;
+      },
+      invalidatesTags: [tagTypes.profile],
     }),
     refreshToken: builder.mutation<UserInfo, void>({
       query: () => ({
         url: "/users/refresh-token",
         method: "POST",
       }),
+      transformResponse: (response: UserInfo) => {
+        if (response.data.accessToken) {
+          storeToken(response.data.accessToken);
+        }
+        return response;
+      },
+      invalidatesTags: [tagTypes.profile],
     }),
     changePassword: builder.mutation<UserInfo, ChangePasswordCredentials>({
       query: (credentials) => ({
@@ -72,12 +99,31 @@ const authApi = baseApi.injectEndpoints({
         method: "POST",
         body: credentials,
       }),
+      invalidatesTags: [tagTypes.profile],
     }),
     getProfile: builder.query<UserInfo, void>({
       query: () => ({
         url: "/users/profile",
-        method: "GET",
       }),
+      providesTags: [tagTypes.profile],
+      transformErrorResponse: (response: any) => {
+        console.error("getProfile error:", response);
+        return response;
+      },
+    }),
+    logoutUser: builder.mutation<LogoutResponse, void>({
+      query: () => ({
+        url: "/users/logout",
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${getStoredToken()}`,
+        },
+      }),
+      transformResponse: (response: LogoutResponse) => {
+        clearToken();
+        return response;
+      },
+      invalidatesTags: [tagTypes.profile],
     }),
   }),
 });
@@ -88,4 +134,5 @@ export const {
   useRefreshTokenMutation,
   useChangePasswordMutation,
   useGetProfileQuery,
+  useLogoutUserMutation,
 } = authApi;

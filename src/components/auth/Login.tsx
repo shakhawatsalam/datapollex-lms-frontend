@@ -6,6 +6,7 @@ import Link from "next/link";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useDispatch } from "react-redux";
 import { Input } from "@/components/ui/input";
 import {
   Form,
@@ -15,6 +16,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useLoginUserMutation } from "@/redux/features/auth/authApi";
+import { setCredentials } from "@/redux/features/auth/authSlice";
 import { storeToken } from "@/utils/tokenStorage";
 import { useRouter } from "next/navigation";
 import { FetchBaseQueryError } from "@reduxjs/toolkit/query";
@@ -26,14 +28,12 @@ const loginSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 
-// Type guard to check if error is FetchBaseQueryError
 const isFetchBaseQueryError = (
   error: unknown
 ): error is FetchBaseQueryError => {
   return (error as FetchBaseQueryError).status !== undefined;
 };
 
-// Type guard to check if data contains a message
 const hasErrorMessage = (data: unknown): data is { message: string } => {
   return (
     data !== null &&
@@ -44,9 +44,11 @@ const hasErrorMessage = (data: unknown): data is { message: string } => {
 };
 
 const Login = () => {
+  const dispatch = useDispatch();
   const [loginUser, { isLoading, isError, error: logInError }] =
     useLoginUserMutation();
   const router = useRouter();
+
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
@@ -58,9 +60,24 @@ const Login = () => {
   const onSubmit = async (data: LoginFormValues) => {
     try {
       const logInResponse = await loginUser(data).unwrap();
-      if (logInResponse.success && logInResponse.data.accessToken) {
+
+      if (
+        logInResponse.success &&
+        logInResponse.data.accessToken &&
+        logInResponse.data.user
+      ) {
+        // Store token in localStorage
         storeToken(logInResponse.data.accessToken);
-        router.push("/"); 
+
+        // Update Redux state
+        dispatch(
+          setCredentials({
+            user: logInResponse.data.user,
+            accessToken: logInResponse.data.accessToken,
+          })
+        );
+
+        router.push("/");
       }
     } catch (error) {
       console.error("Login failed:", error);
@@ -131,14 +148,6 @@ const Login = () => {
                 </FormItem>
               )}
             />
-            <div className='flex justify-end'>
-              {/* <Link
-                href="/forgot-password"
-                className="text-sm text-[#3DB6A6] hover:underline"
-              >
-                Forgot password?
-              </Link> */}
-            </div>
             {errorMessage && (
               <p className='text-red-500 font-semibold'>{errorMessage}</p>
             )}
