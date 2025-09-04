@@ -1,4 +1,3 @@
-
 "use client";
 import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -12,9 +11,9 @@ import { Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useState, useCallback } from "react";
-import { useDropzone } from "react-dropzone";
-import { useCreateCourseMutation } from "@/redux/features/course/courseApi";
 
+import { useCreateCourseMutation } from "@/redux/features/course/courseApi";
+import { useDropzone, FileRejection } from "react-dropzone";
 // Define validation schema with Zod
 const lectureSchema = z.object({
   title: z.string().min(1, "Lecture title is required"),
@@ -72,7 +71,7 @@ const AddCourse = () => {
 
   // Handle thumbnail drop
   const onDropThumbnail = useCallback(
-    (acceptedFiles: File[], rejectedFiles: File[]) => {
+    (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
       if (rejectedFiles.length > 0) {
         const error = rejectedFiles[0].errors[0];
         if (error.code === "file-too-large") {
@@ -545,7 +544,7 @@ const PdfNotesFields = ({
 
   // Handle PDF drop
   const onDropPdf = useCallback(
-    (acceptedFiles: File[], rejectedFiles: File[]) => {
+    (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
       if (rejectedFiles.length > 0) {
         const error = rejectedFiles[0].errors[0];
         if (error.code === "file-too-large") {

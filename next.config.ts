@@ -8,6 +8,14 @@ const nextConfig = {
       "res.cloudinary.com",
     ],
   },
+  rewrites: async () => {
+    return [
+      {
+        source: "/(.*)",
+        destination: "/",
+      },
+    ];
+  },
 };
 
 module.exports = nextConfig;

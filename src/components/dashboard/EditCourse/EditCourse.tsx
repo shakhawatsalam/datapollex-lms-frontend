@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
-import { useDropzone } from "react-dropzone";
+import { useDropzone, FileRejection } from "react-dropzone";
 import {
   useGetCourseByIdQuery,
   useUpdateCourseMutation,
@@ -101,7 +101,7 @@ const EditCourse = () => {
       });
       setThumbnailPreview(courseData.data.thumbnail.url);
 
-      // Initialize pdfNotes with existing PDFs - FIXED
+      // Initialize pdfNotes with existing PDFs
       const initialPdfNotes: Record<
         string,
         { url: string; public_id: string }[]
@@ -133,7 +133,7 @@ const EditCourse = () => {
 
   // Handle thumbnail drop
   const onDropThumbnail = useCallback(
-    (acceptedFiles: File[], rejectedFiles: File[]) => {
+    (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
       if (rejectedFiles.length > 0) {
         const error = rejectedFiles[0].errors[0];
         if (error.code === "file-too-large") {
@@ -728,10 +728,10 @@ const PdfNotesFields = ({
 
   // Handle PDF drop
   const onDropPdf = useCallback(
-    (acceptedFiles: File[], rejectedFiles: (File & { errors?: { code: string }[] })[]) => {
+    (acceptedFiles: File[], rejectedFiles: FileRejection[]) => {
       if (rejectedFiles.length > 0) {
-        const error = rejectedFiles[0]?.errors?.[0];
-        if (error?.code === "file-too-large") {
+        const error = rejectedFiles[0].errors[0];
+        if (error.code === "file-too-large") {
           toast.error("PDF size exceeds 10 MB. Please upload a smaller PDF.");
         } else {
           toast.error("Invalid file. Please upload a valid PDF.");
@@ -755,14 +755,7 @@ const PdfNotesFields = ({
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop: (acceptedFiles, fileRejections, event) =>
-      onDropPdf(
-        acceptedFiles,
-        fileRejections.map(r => ({
-          ...r.file,
-          errors: r.errors ? r.errors.map(e => ({ code: e.code })) : undefined,
-        }))
-      ),
+    onDrop: onDropPdf,
     accept: { "application/pdf": [] },
     multiple: true, // Allow multiple PDFs
     maxSize: 10 * 1024 * 1024, // 10 MB in bytes
@@ -784,9 +777,9 @@ const PdfNotesFields = ({
         className='border-2 border-dashed border-gray-300 p-6 rounded-md cursor-pointer text-center bg-white'>
         <input disabled={isSubmitting} {...getInputProps()} />
         {isDragActive ? (
-          <p className='text-gray-500'>Drop the PDFs here...</p>
+          <p className='text-gray-600'>Drop the PDFs here...</p>
         ) : (
-          <p className='text-gray-500'>
+          <p className='text-gray-600'>
             Drag & drop PDF notes (max 10 MB each) here, or click to select
           </p>
         )}

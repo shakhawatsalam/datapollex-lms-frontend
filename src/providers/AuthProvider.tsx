@@ -10,6 +10,27 @@ import {
 import { useGetProfileQuery } from "@/redux/features/auth/authApi";
 import { getStoredToken } from "@/utils/tokenStorage";
 
+// Define the User interface to match the API response
+interface User {
+  _id: string;
+  name: string;
+  email: string;
+  role: string;
+  profilePic: {
+    public_id: string;
+    url: string;
+  };
+  courses: {
+    courseId: string;
+    completedLectures: string[];
+    progress: number;
+    _id: string;
+  }[];
+  createdAt: string;
+  updatedAt: string;
+  __v: number;
+}
+
 interface AuthProviderProps {
   children: React.ReactNode;
 }
@@ -38,6 +59,31 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     refetchOnMountOrArgChange: true, // Force refetch on mount
   });
 
+  // Type guard to validate profileData.data as User
+  const isValidUser = (data: any): data is User => {
+    return (
+      data &&
+      typeof data._id === "string" &&
+      typeof data.name === "string" &&
+      typeof data.email === "string" &&
+      typeof data.role === "string" &&
+      data.profilePic &&
+      typeof data.profilePic.public_id === "string" &&
+      typeof data.profilePic.url === "string" &&
+      Array.isArray(data.courses) &&
+      data.courses.every(
+        (course: any) =>
+          typeof course.courseId === "string" &&
+          Array.isArray(course.completedLectures) &&
+          typeof course.progress === "number" &&
+          typeof course._id === "string"
+      ) &&
+      typeof data.createdAt === "string" &&
+      typeof data.updatedAt === "string" &&
+      typeof data.__v === "number"
+    );
+  };
+
   useEffect(() => {
     console.log("AuthProvider: Profile query state:", {
       isLoading,
@@ -62,13 +108,23 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
 
     if (profileData?.success && profileData.data && token) {
-      console.log("AuthProvider: Setting credentials:", profileData.data);
-      dispatch(
-        setCredentials({
-          user: profileData.data, // Use profileData.data directly
-          accessToken: token,
-        })
-      );
+      if (isValidUser(profileData.data)) {
+        console.log("AuthProvider: Setting credentials:", profileData.data);
+        dispatch(
+          setCredentials({
+            user: profileData.data, // Type-safe: validated as User
+            accessToken: token,
+          })
+        );
+      } else {
+        console.error(
+          "AuthProvider: Invalid user profile data:",
+          profileData.data
+        );
+        dispatch(initializeAuth({ accessToken: null }));
+        localStorage.removeItem("accessToken");
+        setToken(null);
+      }
     } else if (!isLoading && !isFetching && token) {
       console.warn("AuthProvider: No valid profile data:", profileData);
     }
