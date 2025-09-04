@@ -5,6 +5,7 @@ import "./globals.css";
 import Navbar from "@/components/shared/NavBar";
 import Footer from "@/components/shared/Footer";
 import { AuthProvider } from "@/providers/AuthProvider";
+import { Toaster } from "sonner";
 
 const roboto = Roboto({
   variable: "--font-roboto",
@@ -32,9 +33,10 @@ export default function RootLayout({
         className={`${roboto.variable} ${geistMono.variable} antialiased font-roboto`}>
         <ReduxProvider>
           <AuthProvider>
-            <Navbar />
+            {/* <Navbar /> */}
             {children}
-            <Footer />
+            {/* <Footer /> */}
+            <Toaster />
           </AuthProvider>
         </ReduxProvider>
       </body>

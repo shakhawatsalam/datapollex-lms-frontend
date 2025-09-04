@@ -7,11 +7,21 @@ import Image from "next/image";
 
 const Hero = () => {
   return (
-    <section className='py-12 md:py-20'>
+    <section className='py-12 md:py-20 w-full bg-white relative'>
+      {/* Teal Glow Background */}
+      <div
+        className='absolute inset-0 z-0'
+        style={{
+          backgroundImage: `
+        radial-gradient(125% 125% at 50% 10%, #ffffff 40%, #14b8a6 100%)
+      `,
+          backgroundSize: "100% 100%",
+        }}
+      />
       <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'>
         <div className='grid grid-cols-1 md:grid-cols-2 gap-8 items-center'>
           {/* Text Content */}
-          <div className='flex flex-col items-center md:items-start text-center md:text-left'>
+          <div className='flex flex-col items-center md:items-start text-center md:text-left z-10'>
             <h1
               className={cn(
                 "text-4xl md:text-5xl font-bold bg-gradient-to-r from-[#00564A] to-[#00A892] bg-clip-text text-transparent mb-4"

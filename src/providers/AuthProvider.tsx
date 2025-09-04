@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useDispatch } from "react-redux";
 import {
   initializeAuth,
   setCredentials,
+  setLoading,
 } from "@/redux/features/auth/authSlice";
 import { useGetProfileQuery } from "@/redux/features/auth/authApi";
 import { getStoredToken } from "@/utils/tokenStorage";
@@ -15,44 +16,65 @@ interface AuthProviderProps {
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const dispatch = useDispatch();
+  const [token, setToken] = useState<string | null>(null);
 
-  // Get token from localStorage on mount
-  const storedToken = getStoredToken();
+  // Get token on client-side mount
+  useEffect(() => {
+    const storedToken = getStoredToken();
+    console.log("AuthProvider: Retrieved token:", storedToken);
+    setToken(storedToken);
+    dispatch(initializeAuth({ accessToken: storedToken }));
+  }, [dispatch]);
 
-  // Only fetch profile if we have a token
+  // Fetch profile if we have a token
   const {
     data: profileData,
     isLoading,
     isError,
+    error,
+    isFetching,
   } = useGetProfileQuery(undefined, {
-    skip: !storedToken, // Skip if no token
+    skip: !token,
+    refetchOnMountOrArgChange: true, // Force refetch on mount
   });
 
   useEffect(() => {
-    if (!storedToken) {
-      // No token found, user is not authenticated
-      dispatch(initializeAuth({ accessToken: null }));
+    console.log("AuthProvider: Profile query state:", {
+      isLoading,
+      isFetching,
+      isError,
+      error,
+      profileData,
+    });
+
+    if (isLoading || isFetching) {
+      dispatch(setLoading(true));
       return;
     }
 
-    if (profileData?.success && profileData.data.user) {
-      // We have both token and user data
+    if (isError) {
+      console.error("AuthProvider: Failed to fetch user profile:", error);
+      dispatch(initializeAuth({ accessToken: null }));
+      localStorage.removeItem("accessToken");
+      setToken(null);
+      dispatch(setLoading(false));
+      return;
+    }
+
+    if (profileData?.success && profileData.data && token) {
+      console.log("AuthProvider: Setting credentials:", profileData.data);
       dispatch(
         setCredentials({
-          user: profileData.data.user,
-          accessToken: storedToken,
+          user: profileData.data, // Use profileData.data directly
+          accessToken: token,
         })
       );
-    } else if (isError) {
-      // Token exists but profile fetch failed (token might be invalid)
-      dispatch(initializeAuth({ accessToken: null }));
-      // Optionally clear the invalid token
-      localStorage.removeItem("accessToken");
-    } else if (!isLoading && storedToken) {
-      // We have token but no profile data yet
-      dispatch(initializeAuth({ accessToken: storedToken }));
+    } else if (!isLoading && !isFetching && token) {
+      console.warn("AuthProvider: No valid profile data:", profileData);
     }
-  }, [dispatch, storedToken, profileData, isError, isLoading]);
+
+    dispatch(setLoading(false));
+  }, [dispatch, token, profileData, isError, isLoading, isFetching, error]);
 
   return <>{children}</>;
 };

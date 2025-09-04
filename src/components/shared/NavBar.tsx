@@ -32,6 +32,7 @@ interface NavLink {
 
 const NavBar = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [token, setToken] = useState<string | null>(null); // State for token
   const router = useRouter();
   const dispatch = useDispatch();
 
@@ -39,7 +40,13 @@ const NavBar = () => {
   const isAuthenticated = useSelector(selectIsAuthenticated);
   const user = useSelector(selectCurrentUser);
   const isAuthLoading = useSelector(selectAuthLoading);
-
+  // Get token on client-side mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setToken(localStorage.getItem("accessToken"));
+    }
+  }, []);
+  console.log(user);
   // API hooks
   const [logoutUser] = useLogoutUserMutation();
   const {
@@ -47,13 +54,12 @@ const NavBar = () => {
     isLoading: isProfileLoading,
     error,
   } = useGetProfileQuery(undefined, {
-    skip: !localStorage.getItem("accessToken") || !!user,
+    skip: !token || !!user, // Use token state instead of localStorage
   });
 
   useEffect(() => {
     if (error) {
       console.error("Failed to fetch user profile:", error);
-      // toast.error("Failed to load user profile. Please log in again.");
       clearToken();
       dispatch(logout());
       router.push("/login");
@@ -63,10 +69,8 @@ const NavBar = () => {
   const handleLogout = async () => {
     try {
       await logoutUser().unwrap();
-      // toast.success("Logged out successfully");
     } catch (error) {
       console.error("Logout failed:", error);
-      // toast.error("Logout failed. Please try again.");
     }
     clearToken();
     dispatch(logout());
@@ -96,8 +100,13 @@ const NavBar = () => {
     ...commonLinks,
     {
       name: "Manage Courses",
-      href: "/admin/courses",
+      href: "/dashboard/all-courses",
       icon: <PlusCircle className='h-5 w-5' />,
+    },
+    {
+      name: "My Courses",
+      href: "/my-courses",
+      icon: <BookOpen className='h-5 w-5' />,
     },
   ];
 
