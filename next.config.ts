@@ -11,7 +11,11 @@ const nextConfig = {
   rewrites: async () => {
     return [
       {
-        source: "/(.*)",
+        source: "/courses/:id",
+        destination: "/courses/:id",
+      },
+      {
+        source: "/:path*",
         destination: "/",
       },
     ];
