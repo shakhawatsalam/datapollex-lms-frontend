@@ -9,26 +9,20 @@ import Link from "next/link";
 import { useAppSelector } from "@/redux/hook";
 import { selectCurrentUser } from "@/redux/features/auth/authSlice";
 
-// Mock user data as fallback
-const fallbackUserData = {
-  user: {
-    courses: [
-      {
-        courseId: "68b5d4750ce4ed2713d55498",
-        completedLectures: [],
-        progress: 0,
-        _id: "68b5d6340ce4ed2713d554c3",
-      },
-    ],
-  },
-};
+// Define the type for enrolled courses
+interface EnrolledCourse {
+  courseId: string;
+  completedLectures: string[];
+  progress: number;
+  _id: string;
+}
 
 const MyCourses = () => {
   const user = useAppSelector(selectCurrentUser);
-  // Use fallback data if user is not available during SSR or initial render
-  const coursesToDisplay = user?.courses?.length
+  // Explicitly type coursesToDisplay and handle undefined case
+  const coursesToDisplay: EnrolledCourse[] = user?.courses?.length
     ? user.courses
-    : fallbackUserData.user.courses;
+    : [];
 
   // Fetch course details for each enrolled course
   const courseQueries = coursesToDisplay.map((enrolledCourse) =>
@@ -63,11 +57,9 @@ const MyCourses = () => {
           </div>
         ) : (
           <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6'>
-            {courses.map((course) => (
+            {courses.map((course, index) => (
               <Card
-                key={
-                  course._id || coursesToDisplay[courses.indexOf(course)]._id
-                }
+                key={course._id || coursesToDisplay[index]._id}
                 className='bg-white shadow-lg hover:shadow-xl transition-shadow'>
                 <CardHeader>
                   <div className='relative w-full h-48'>

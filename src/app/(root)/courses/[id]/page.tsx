@@ -9,35 +9,78 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import {
-  Star,
-  Play,
-  Clock,
-  Users,
-  Award,
-  Video,
-  FileText,
-  ChevronRight,
-} from "lucide-react";
+import { Star, Play, Users, Award, Video } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState } from "react";
-import { useGetCourseByIdQuery } from "@/redux/features/course/courseApi";
+import {
+  useEnrollInCourseMutation,
+  useGetCourseByIdQuery,
+} from "@/redux/features/course/courseApi";
 import { useAppSelector } from "@/redux/hook";
 import { selectCurrentUser } from "@/redux/features/auth/authSlice";
-import { isErrored } from "stream";
+
+// Define types for course data
+interface Lecture {
+  _id: string;
+  title: string;
+  videoUrl?: string;
+  pdfNotes?: { public_id: string; url: string }[]; // Updated to match API structure
+}
+
+interface Module {
+  _id: string;
+  moduleNumber: number;
+  title: string;
+  lectures: Lecture[];
+}
+
+interface Course {
+  _id: string;
+  title: string;
+  description: string;
+  price: number;
+  thumbnail?: { public_id: string; url: string }; // Updated to match API structure
+  modules: Module[];
+}
+
+interface EnrolledCourse {
+  courseId: string;
+  completedLectures: string[];
+  progress: number;
+  _id: string;
+}
+
+interface User {
+  _id: string;
+  name: string;
+  email: string;
+  role: string;
+  courses: EnrolledCourse[];
+  profilePic: { public_id: string; url: string };
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface EnrollResponse {
+  success: boolean;
+  data: User;
+  message: string;
+  meta: Record<string, any>;
+}
 
 const CourseDetails = () => {
-  const { id } = useParams();
-  const { data, isLoading, error } = useGetCourseByIdQuery(id as string);
+  const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const { data, isLoading, error } = useGetCourseByIdQuery(id, { skip: !id });
   const [expandedModule, setExpandedModule] = useState<string | null>(null);
-  const user = useAppSelector(selectCurrentUser);
+  const user = useAppSelector(selectCurrentUser) as User | null;
+  const [enrollInCourse] = useEnrollInCourseMutation();
 
-  const isEnrolled = user?.courses.some(
-    (course: any) => course.courseId === id
-  );
+  const isEnrolled =
+    user?.courses?.some((course) => course.courseId === id) || false;
 
   // Static data for instructor, reviews, and related courses
   const instructor = {
@@ -138,11 +181,27 @@ const CourseDetails = () => {
       <div className='text-center py-20 text-red-600'>Error loading course</div>
     );
 
-  const course = data.data;
+  const course: Course = data.data;
   const totalLectures = course.modules.reduce(
     (acc, mod) => acc + mod.lectures.length,
     0
   );
+
+  // Course Enrollment
+  const handleEnroll = async (courseId: string) => {
+    try {
+      const enrollResponse = (await enrollInCourse(
+        courseId
+      ).unwrap()) as EnrollResponse;
+      if (enrollResponse.success) {
+        router.push("/my-courses");
+      } else {
+        console.error("Enrollment failed:", enrollResponse.message);
+      }
+    } catch (error) {
+      console.error("Enrollment failed:", error);
+    }
+  };
 
   return (
     <div className='min-h-screen bg-gray-50'>
@@ -167,12 +226,10 @@ const CourseDetails = () => {
               </div>
               <Button
                 size='lg'
-                className='bg-white text-[#3DB6A6] hover:bg-gray-100 font-semibold px-8 py-3 rounded-full'>
-                {isEnrolled ? (
-                  <Link href={`"#"`}>Already Errolled</Link>
-                ) : (
-                  <Link href={`/courses/${course._id}/enroll`}>Enroll Now</Link>
-                )}
+                onClick={() => handleEnroll(id)}
+                className='bg-white text-[#3DB6A6] hover:bg-gray-100 font-semibold px-8 py-3 rounded-full'
+                disabled={isEnrolled}>
+                {isEnrolled ? "Already Enrolled" : "Enroll Now"}
               </Button>
             </div>
             {/* Course Preview Card */}
@@ -213,16 +270,12 @@ const CourseDetails = () => {
                       Add to Cart
                     </Button>
                     <Button
+                      onClick={() => handleEnroll(id)}
                       variant='outline'
                       className='w-full border-[#3DB6A6] text-[#3DB6A6] hover:bg-[#3DB6A6] hover:text-white rounded-full'
-                      size='lg'>
-                      {isEnrolled ? (
-                        <Link href={`"#"`}>Already Errolled</Link>
-                      ) : (
-                        <Link href={`/courses/${course._id}/enroll`}>
-                          Enroll Now
-                        </Link>
-                      )}
+                      size='lg'
+                      disabled={isEnrolled}>
+                      {isEnrolled ? "Already Enrolled" : "Enroll Now"}
                     </Button>
                   </div>
                   <div className='space-y-2 text-sm'>
@@ -310,11 +363,12 @@ const CourseDetails = () => {
                                   Video
                                 </span>
                               )}
-                              {lecture.pdfNotes?.length > 0 && (
-                                <span className='text-sm text-gray-500'>
-                                  {lecture.pdfNotes.length} PDF
-                                </span>
-                              )}
+                              {lecture.pdfNotes &&
+                                lecture.pdfNotes.length > 0 && (
+                                  <span className='text-sm text-gray-500'>
+                                    {lecture.pdfNotes.length} PDF
+                                  </span>
+                                )}
                             </div>
                           ))}
                         </div>
