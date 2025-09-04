@@ -8,18 +8,18 @@ const nextConfig = {
       "res.cloudinary.com",
     ],
   },
-  rewrites: async () => {
-    return [
-      {
-        source: "/courses/:id",
-        destination: "/courses/:id",
-      },
-      {
-        source: "/:path*",
-        destination: "/",
-      },
-    ];
-  },
+  // rewrites: async () => {
+  //   return [
+  //     {
+  //       source: "/courses/:id",
+  //       destination: "/courses/:id",
+  //     },
+  //     {
+  //       source: "/:path*",
+  //       destination: "/",
+  //     },
+  //   ];
+  // },
 };
 
 module.exports = nextConfig;
