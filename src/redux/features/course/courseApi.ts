@@ -1,6 +1,5 @@
 import { IGenericResponse } from "@/interface/common";
 import { ICourse, ILecture, IModule } from "@/interface/course";
-import { IUserResponse } from "@/interface/user";
 import baseApi from "@/redux/baseApi";
 import { tagTypes } from "@/redux/tag-types";
 

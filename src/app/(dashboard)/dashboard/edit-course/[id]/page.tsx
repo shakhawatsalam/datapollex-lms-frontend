@@ -23,12 +23,7 @@ const lectureSchema = z.object({
   _id: z.string().optional(),
   title: z.string().min(1, "Lecture title is required"),
   videoUrl: z.string().url("Invalid video URL"),
-  pdfNotes: z.array(
-    z.object({
-      public_id: z.string().min(1, "PDF public ID is required"),
-      url: z.string().url("Invalid PDF URL"),
-    })
-  ),
+  pdfNotes: z.array(z.any()).optional(), // PDF validation handled server-side
 });
 
 const moduleSchema = z.object({
@@ -54,6 +49,12 @@ const EditCourse = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [thumbnail, setThumbnail] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
+  const [pdfNotes, setPdfNotes] = useState<
+    Record<
+      string,
+      { file?: File; url?: string; public_id?: string; preview?: string }[]
+    >
+  >({}); // Store PDFs per lecture (new files or existing URLs)
 
   const {
     control,
@@ -99,29 +100,66 @@ const EditCourse = () => {
         })),
       });
       setThumbnailPreview(courseData.data.thumbnail.url);
+
+      // Initialize pdfNotes with existing PDFs - FIXED
+      const initialPdfNotes: Record<
+        string,
+        { url: string; public_id: string }[]
+      > = {};
+      courseData.data.modules.forEach((module: any, mIndex: number) => {
+        module.lectures.forEach((lecture: any, lIndex: number) => {
+          const lectureKey = `${mIndex}-${lIndex}`;
+          // Filter out invalid PDF notes
+          const validPdfNotes = (lecture.pdfNotes || []).filter(
+            (pdf: any) =>
+              pdf &&
+              typeof pdf.public_id === "string" &&
+              typeof pdf.url === "string" &&
+              pdf.public_id.trim() !== "" &&
+              pdf.url.trim() !== ""
+          );
+
+          if (validPdfNotes.length > 0) {
+            initialPdfNotes[lectureKey] = validPdfNotes.map((pdf: any) => ({
+              public_id: pdf.public_id,
+              url: pdf.url,
+            }));
+          }
+        });
+      });
+      setPdfNotes(initialPdfNotes);
     }
   }, [courseData, reset]);
 
   // Handle thumbnail drop
-  const onDrop = useCallback((acceptedFiles: File[], rejectedFiles: File[]) => {
-    if (rejectedFiles.length > 0) {
-      const error = rejectedFiles[0].errors[0];
-      if (error.code === "file-too-large") {
-        toast.error("Image size exceeds 10 MB. Please upload a smaller image.");
-      } else {
-        toast.error("Invalid file. Please upload a valid image.");
+  const onDropThumbnail = useCallback(
+    (acceptedFiles: File[], rejectedFiles: File[]) => {
+      if (rejectedFiles.length > 0) {
+        const error = rejectedFiles[0].errors[0];
+        if (error.code === "file-too-large") {
+          toast.error(
+            "Image size exceeds 10 MB. Please upload a smaller image."
+          );
+        } else {
+          toast.error("Invalid file. Please upload a valid image.");
+        }
+        return;
       }
-      return;
-    }
-    if (acceptedFiles.length > 0) {
-      const file = acceptedFiles[0]; // Only take the first file
-      setThumbnail(file);
-      setThumbnailPreview(URL.createObjectURL(file));
-    }
-  }, []);
+      if (acceptedFiles.length > 0) {
+        const file = acceptedFiles[0]; // Only take the first file
+        setThumbnail(file);
+        setThumbnailPreview(URL.createObjectURL(file));
+      }
+    },
+    []
+  );
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
+  const {
+    getRootProps: getThumbnailRootProps,
+    getInputProps: getThumbnailInputProps,
+    isDragActive: isThumbnailDragActive,
+  } = useDropzone({
+    onDrop: onDropThumbnail,
     accept: { "image/*": [] },
     multiple: false, // Allow only one file
     maxSize: 10 * 1024 * 1024, // 10 MB in bytes
@@ -138,7 +176,82 @@ const EditCourse = () => {
     setIsSubmitting(true);
     try {
       const formData = new FormData();
-      formData.append("courseData", JSON.stringify(data));
+      const pdfNotesIndices: Record<string, number> = {};
+      let pdfIndex = 0;
+
+      // Append new PDFs and build indices
+      Object.entries(pdfNotes).forEach(([key, files]) => {
+        files.forEach((fileObj) => {
+          if (fileObj.file) {
+            // Only append new files
+            formData.append("pdfNotes", fileObj.file); // Append under 'pdfNotes'
+            pdfNotesIndices[key] = pdfIndex; // Map lecture to PDF index
+            pdfIndex++;
+          }
+        });
+      });
+
+      // Helper function to validate PDF notes
+      const isValidPdfNote = (pdf: any) => {
+        return (
+          pdf &&
+          typeof pdf === "object" &&
+          typeof pdf.public_id === "string" &&
+          typeof pdf.url === "string" &&
+          pdf.public_id.trim() !== "" &&
+          pdf.url.trim() !== ""
+        );
+      };
+
+      // Include existing PDFs in courseData and pdfNotesIndices
+      const updatedData = {
+        ...data,
+        pdfNotesIndices,
+        modules: data.modules.map((module, mIndex) => ({
+          _id: module._id, // Preserve module ID
+          title: module.title,
+          moduleNumber: module.moduleNumber,
+          lectures: module.lectures.map((lecture, lIndex) => {
+            // Get existing and new PDFs for this lecture
+            const lectureKey = `${mIndex}-${lIndex}`;
+            const lecturePdfs = pdfNotes[lectureKey] || [];
+
+            // Filter out invalid PDFs and separate existing vs new
+            const validPdfs = lecturePdfs
+              .filter((pdf) => {
+                // For existing PDFs, check if they have valid url and public_id
+                if (pdf.url && pdf.public_id) {
+                  return pdf.url.trim() !== "" && pdf.public_id.trim() !== "";
+                }
+                // For new PDFs, we just need the file
+                return pdf.file;
+              })
+              .map((pdf) => {
+                // Return only the URL and public_id for existing PDFs
+                if (pdf.url && pdf.public_id) {
+                  return {
+                    public_id: pdf.public_id,
+                    url: pdf.url,
+                  };
+                }
+                // For new PDFs, return empty object (they'll be handled by the backend)
+                return null;
+              })
+              .filter((pdf) => pdf !== null); // Remove null entries (new PDFs)
+
+            return {
+              _id: lecture._id, // Preserve lecture ID
+              title: lecture.title,
+              videoUrl: lecture.videoUrl,
+              pdfNotes: validPdfs,
+            };
+          }),
+        })),
+      };
+
+      console.log("Sending data:", JSON.stringify(updatedData, null, 2)); // Debug log
+
+      formData.append("courseData", JSON.stringify(updatedData));
       if (thumbnail) {
         formData.append("thumbnail", thumbnail);
       }
@@ -147,6 +260,32 @@ const EditCourse = () => {
       toast.success("Course updated successfully");
       setThumbnail(null);
       setThumbnailPreview(courseData?.data.thumbnail.url || null);
+
+      // Refresh the PDF notes state with current data
+      const refreshedPdfNotes: Record<
+        string,
+        { url: string; public_id: string }[]
+      > = {};
+      data.modules.forEach((module, mIndex) => {
+        module.lectures.forEach((lecture, lIndex) => {
+          const lectureKey = `${mIndex}-${lIndex}`;
+          const currentPdfs = pdfNotes[lectureKey] || [];
+          // Keep only existing PDFs (those with url and public_id)
+          refreshedPdfNotes[lectureKey] = currentPdfs
+            .filter(
+              (pdf) =>
+                pdf.url &&
+                pdf.public_id &&
+                pdf.url.trim() !== "" &&
+                pdf.public_id.trim() !== ""
+            )
+            .map((pdf) => ({
+              url: pdf.url!,
+              public_id: pdf.public_id!,
+            }));
+        });
+      });
+      setPdfNotes(refreshedPdfNotes);
     } catch (error) {
       console.error("Failed to update course", error);
       toast.error("Failed to update course");
@@ -270,10 +409,13 @@ const EditCourse = () => {
               <div className='space-y-2'>
                 <Label className='text-gray-600'>Thumbnail</Label>
                 <div
-                  {...getRootProps()}
+                  {...getThumbnailRootProps()}
                   className='border-2 border-dashed border-gray-300 p-6 rounded-md cursor-pointer text-center bg-white'>
-                  <input disabled={isSubmitting} {...getInputProps()} />
-                  {isDragActive ? (
+                  <input
+                    disabled={isSubmitting}
+                    {...getThumbnailInputProps()}
+                  />
+                  {isThumbnailDragActive ? (
                     <p className='text-gray-500'>Drop the thumbnail here...</p>
                   ) : (
                     <p className='text-gray-500'>
@@ -313,7 +455,18 @@ const EditCourse = () => {
                         <Button
                           variant='destructive'
                           size='sm'
-                          onClick={() => removeModule(moduleIndex)}
+                          onClick={() => {
+                            removeModule(moduleIndex);
+                            setPdfNotes((prev) => {
+                              const newPdfNotes = { ...prev };
+                              Object.keys(newPdfNotes).forEach((key) => {
+                                if (key.startsWith(`${moduleIndex}-`)) {
+                                  delete newPdfNotes[key];
+                                }
+                              });
+                              return newPdfNotes;
+                            });
+                          }}
                           className='bg-red-500 hover:bg-red-600'>
                           <Trash2 className='h-4 w-4' />
                         </Button>
@@ -365,6 +518,9 @@ const EditCourse = () => {
                         control={control}
                         moduleIndex={moduleIndex}
                         errors={errors}
+                        pdfNotes={pdfNotes}
+                        setPdfNotes={setPdfNotes}
+                        isSubmitting={isSubmitting}
                       />
                     </CardContent>
                   </Card>
@@ -407,10 +563,26 @@ const LectureFields = ({
   control,
   moduleIndex,
   errors,
+  pdfNotes,
+  setPdfNotes,
+  isSubmitting,
 }: {
   control: any;
   moduleIndex: number;
   errors: any;
+  pdfNotes: Record<
+    string,
+    { file?: File; url?: string; public_id?: string; preview?: string }[]
+  >;
+  setPdfNotes: React.Dispatch<
+    React.SetStateAction<
+      Record<
+        string,
+        { file?: File; url?: string; public_id?: string; preview?: string }[]
+      >
+    >
+  >;
+  isSubmitting: boolean;
 }) => {
   const {
     fields: lectureFields,
@@ -434,7 +606,15 @@ const LectureFields = ({
               <Button
                 variant='destructive'
                 size='sm'
-                onClick={() => removeLecture(lectureIndex)}
+                onClick={() => {
+                  removeLecture(lectureIndex);
+                  const key = `${moduleIndex}-${lectureIndex}`;
+                  setPdfNotes((prev) => {
+                    const newPdfNotes = { ...prev };
+                    delete newPdfNotes[key];
+                    return newPdfNotes;
+                  });
+                }}
                 className='bg-red-500 hover:bg-red-600'>
                 <Trash2 className='h-4 w-4' />
               </Button>
@@ -491,6 +671,9 @@ const LectureFields = ({
               moduleIndex={moduleIndex}
               lectureIndex={lectureIndex}
               errors={errors}
+              pdfNotes={pdfNotes}
+              setPdfNotes={setPdfNotes}
+              isSubmitting={isSubmitting}
             />
           </CardContent>
         </Card>
@@ -519,89 +702,106 @@ const PdfNotesFields = ({
   moduleIndex,
   lectureIndex,
   errors,
+  pdfNotes,
+  setPdfNotes,
+  isSubmitting,
 }: {
   control: any;
   moduleIndex: number;
   lectureIndex: number;
   errors: any;
+  pdfNotes: Record<
+    string,
+    { file?: File; url?: string; public_id?: string; preview?: string }[]
+  >;
+  setPdfNotes: React.Dispatch<
+    React.SetStateAction<
+      Record<
+        string,
+        { file?: File; url?: string; public_id?: string; preview?: string }[]
+      >
+    >
+  >;
+  isSubmitting: boolean;
 }) => {
-  const {
-    fields: pdfNotesFields,
-    append: appendPdfNote,
-    remove: removePdfNote,
-  } = useFieldArray({
-    control,
-    name: `modules.${moduleIndex}.lectures.${lectureIndex}.pdfNotes`,
+  const pdfKey = `${moduleIndex}-${lectureIndex}`;
+
+  // Handle PDF drop
+  const onDropPdf = useCallback(
+    (acceptedFiles: File[], rejectedFiles: File[]) => {
+      if (rejectedFiles.length > 0) {
+        const error = rejectedFiles[0].errors[0];
+        if (error.code === "file-too-large") {
+          toast.error("PDF size exceeds 10 MB. Please upload a smaller PDF.");
+        } else {
+          toast.error("Invalid file. Please upload a valid PDF.");
+        }
+        return;
+      }
+      if (acceptedFiles.length > 0) {
+        setPdfNotes((prev) => ({
+          ...prev,
+          [pdfKey]: [
+            ...(prev[pdfKey] || []),
+            ...acceptedFiles.map((file) => ({
+              file,
+              preview: URL.createObjectURL(file),
+            })),
+          ],
+        }));
+      }
+    },
+    [pdfKey]
+  );
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop: onDropPdf,
+    accept: { "application/pdf": [] },
+    multiple: true, // Allow multiple PDFs
+    maxSize: 10 * 1024 * 1024, // 10 MB in bytes
   });
+
+  // Remove PDF
+  const removePdf = (index: number) => {
+    setPdfNotes((prev) => ({
+      ...prev,
+      [pdfKey]: (prev[pdfKey] || []).filter((_, i) => i !== index),
+    }));
+  };
 
   return (
     <div className='space-y-4 mt-4'>
       <Label className='text-gray-600'>PDF Notes</Label>
-      {pdfNotesFields.map((pdfNote, pdfNoteIndex) => (
-        <div key={pdfNote.id} className='flex gap-4 items-center'>
-          <div className='flex-1'>
-            <Controller
-              name={`modules.${moduleIndex}.lectures.${lectureIndex}.pdfNotes.${pdfNoteIndex}.public_id`}
-              control={control}
-              render={({ field }) => (
-                <Input
-                  {...field}
-                  placeholder='PDF Public ID'
-                  className='border-[#3DB6A6] focus:ring-[#3DB6A6]'
-                />
-              )}
-            />
-            {errors.modules?.[moduleIndex]?.lectures?.[lectureIndex]
-              ?.pdfNotes?.[pdfNoteIndex]?.public_id && (
-              <p className='text-red-500 text-sm'>
-                {
-                  errors.modules[moduleIndex].lectures[lectureIndex].pdfNotes[
-                    pdfNoteIndex
-                  ].public_id.message
-                }
+      <div
+        {...getRootProps()}
+        className='border-2 border-dashed border-gray-300 p-6 rounded-md cursor-pointer text-center bg-white'>
+        <input disabled={isSubmitting} {...getInputProps()} />
+        {isDragActive ? (
+          <p className='text-gray-500'>Drop the PDFs here...</p>
+        ) : (
+          <p className='text-gray-500'>
+            Drag & drop PDF notes (max 10 MB each) here, or click to select
+          </p>
+        )}
+      </div>
+      {pdfNotes[pdfKey]?.length > 0 && (
+        <div className='space-y-2'>
+          {pdfNotes[pdfKey].map((pdf, index) => (
+            <div key={index} className='flex items-center gap-4'>
+              <p className='text-gray-600 truncate'>
+                {pdf.file?.name || pdf.url?.split("/").pop()}
               </p>
-            )}
-          </div>
-          <div className='flex-1'>
-            <Controller
-              name={`modules.${moduleIndex}.lectures.${lectureIndex}.pdfNotes.${pdfNoteIndex}.url`}
-              control={control}
-              render={({ field }) => (
-                <Input
-                  {...field}
-                  placeholder='PDF URL'
-                  className='border-[#3DB6A6] focus:ring-[#3DB6A6]'
-                />
-              )}
-            />
-            {errors.modules?.[moduleIndex]?.lectures?.[lectureIndex]
-              ?.pdfNotes?.[pdfNoteIndex]?.url && (
-              <p className='text-red-500 text-sm'>
-                {
-                  errors.modules[moduleIndex].lectures[lectureIndex].pdfNotes[
-                    pdfNoteIndex
-                  ].url.message
-                }
-              </p>
-            )}
-          </div>
-          <Button
-            variant='destructive'
-            size='sm'
-            onClick={() => removePdfNote(pdfNoteIndex)}
-            className='bg-red-500 hover:bg-red-600'>
-            <Trash2 className='h-4 w-4' />
-          </Button>
+              <Button
+                variant='destructive'
+                size='sm'
+                onClick={() => removePdf(index)}
+                className='bg-red-500 hover:bg-red-600'>
+                <Trash2 className='h-4 w-4' />
+              </Button>
+            </div>
+          ))}
         </div>
-      ))}
-      <Button
-        type='button'
-        onClick={() => appendPdfNote({ public_id: "", url: "" })}
-        className={cn(
-          "bg-gradient-to-r from-[#3DB6A6] to-[#2D7F74] text-white hover:from-[#2D7F74] hover:to-[#3DB6A6] rounded-full"
-        )}>
-        <Plus className='h-4 w-4 mr-2' /> Add PDF Note
-      </Button>
+      )}
     </div>
   );
 };
