@@ -94,7 +94,7 @@ const CourseContent = () => {
     0
   );
   const progress = userCourse
-    ? (completedLectures.length / totalLectures) * 100
+    ? Math.min((completedLectures.length / totalLectures) * 100, 100)
     : 0;
 
   // Select the first unlocked lecture by default
@@ -174,7 +174,7 @@ const CourseContent = () => {
       </div>
 
       {/* Main Content */}
-      <div className='max-w-7xl mx-auto px-4 py-8 responsive'>
+      <div className='max-w-7xl mx-auto px-4 py-8'>
         <div className='flex flex-col-reverse lg:flex-row-reverse gap-5'>
           {/* Sidebar: Module List */}
           <div className='lg:flex-1'>

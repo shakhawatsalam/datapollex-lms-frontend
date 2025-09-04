@@ -4,7 +4,6 @@ import { IUserResponse } from "@/interface/user";
 import baseApi from "@/redux/baseApi";
 import { tagTypes } from "@/redux/tag-types";
 
-
 const courseApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     createCourse: builder.mutation<IGenericResponse<ICourse>, FormData>({
@@ -146,7 +145,7 @@ const courseApi = baseApi.injectEndpoints({
         url: `/courses/${id}/enroll`,
         method: "POST",
       }),
-      invalidatesTags: [tagTypes.user, tagTypes.course],
+      invalidatesTags: [tagTypes.user, tagTypes.course, tagTypes.profile],
     }),
 
     markLectureComplete: builder.mutation<
@@ -157,7 +156,7 @@ const courseApi = baseApi.injectEndpoints({
         url: `/courses/${courseId}/modules/${moduleId}/lectures/${lectureId}/complete`,
         method: "POST",
       }),
-      invalidatesTags: [tagTypes.user, tagTypes.course],
+      invalidatesTags: [tagTypes.user, tagTypes.course, tagTypes.profile],
     }),
   }),
 });

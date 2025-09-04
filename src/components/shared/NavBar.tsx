@@ -82,7 +82,7 @@ const NavBar = () => {
     { name: "Home", href: "/", icon: <Home className='h-5 w-5' /> },
     {
       name: "Courses",
-      href: "/courses",
+      href: "#",
       icon: <BookOpen className='h-5 w-5' />,
     },
   ];
@@ -163,7 +163,7 @@ const NavBar = () => {
                 {isAuthenticated && currentUser ? (
                   <div className='flex items-center justify-center gap-2.5'>
                     <Link
-                      href='/profile'
+                      href='#'
                       className='flex items-center space-x-2 text-gray-700 hover:text-[#00A892] px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200'>
                       <User className='h-5 w-5' />
                       <span>{currentUser.name || "Profile"}</span>

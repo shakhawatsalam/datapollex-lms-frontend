@@ -38,7 +38,7 @@ const Hero = () => {
                 className={cn(
                   "bg-gradient-to-r from-[#3DB6A6] to-[#2D7F74] text-white hover:from-[#2D7F74] hover:to-[#3DB6A6] rounded-full px-6 py-3 text-sm font-medium"
                 )}>
-                <Link href='/courses'>Explore Courses</Link>
+                <Link href='#'>Explore Courses</Link>
               </Button>
               <Button
                 asChild
