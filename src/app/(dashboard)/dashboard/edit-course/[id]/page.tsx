@@ -9,17 +9,18 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-import { useState, useEffect } from "react";
+import { toast } from "sonner";
+import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
+import { useDropzone } from "react-dropzone";
 import {
   useGetCourseByIdQuery,
   useUpdateCourseMutation,
 } from "@/redux/features/course/courseApi";
-import { toast } from "sonner";
 
 // Define validation schema with Zod
 const lectureSchema = z.object({
+  _id: z.string().optional(),
   title: z.string().min(1, "Lecture title is required"),
   videoUrl: z.string().url("Invalid video URL"),
   pdfNotes: z.array(
@@ -41,14 +42,9 @@ const courseSchema = z.object({
   title: z.string().min(1, "Course title is required"),
   description: z.string().min(1, "Course description is required"),
   price: z.number().min(0, "Price cannot be negative"),
-  thumbnail: z.object({
-    public_id: z.string().min(1, "Thumbnail public ID is required"),
-    url: z.string().url("Invalid thumbnail URL"),
-  }),
   modules: z.array(moduleSchema),
 });
 
-// Infer form type from schema
 type CourseFormData = z.infer<typeof courseSchema>;
 
 const EditCourse = () => {
@@ -56,6 +52,8 @@ const EditCourse = () => {
   const { data: courseData, isLoading: isFetching } = useGetCourseByIdQuery(id);
   const [updateCourse, { isLoading: isUpdating }] = useUpdateCourseMutation();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [thumbnail, setThumbnail] = useState<File | null>(null);
+  const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
 
   const {
     control,
@@ -68,7 +66,6 @@ const EditCourse = () => {
       title: "",
       description: "",
       price: 0,
-      thumbnail: { public_id: "", url: "" },
       modules: [],
     },
   });
@@ -89,7 +86,6 @@ const EditCourse = () => {
         title: courseData.data.title,
         description: courseData.data.description,
         price: courseData.data.price,
-        thumbnail: courseData.data.thumbnail,
         modules: courseData.data.modules.map((module: any) => ({
           _id: module._id,
           title: module.title,
@@ -102,16 +98,58 @@ const EditCourse = () => {
           })),
         })),
       });
+      setThumbnailPreview(courseData.data.thumbnail.url);
     }
   }, [courseData, reset]);
 
+  // Handle thumbnail drop
+  const onDrop = useCallback((acceptedFiles: File[], rejectedFiles: File[]) => {
+    if (rejectedFiles.length > 0) {
+      const error = rejectedFiles[0].errors[0];
+      if (error.code === "file-too-large") {
+        toast.error("Image size exceeds 10 MB. Please upload a smaller image.");
+      } else {
+        toast.error("Invalid file. Please upload a valid image.");
+      }
+      return;
+    }
+    if (acceptedFiles.length > 0) {
+      const file = acceptedFiles[0]; // Only take the first file
+      setThumbnail(file);
+      setThumbnailPreview(URL.createObjectURL(file));
+    }
+  }, []);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: { "image/*": [] },
+    multiple: false, // Allow only one file
+    maxSize: 10 * 1024 * 1024, // 10 MB in bytes
+  });
+
+  // Remove thumbnail
+  const removeThumbnail = () => {
+    setThumbnail(null);
+    setThumbnailPreview(courseData?.data.thumbnail.url || null);
+  };
+
+  // Handle form submission
   const onSubmit = async (data: CourseFormData) => {
     setIsSubmitting(true);
     try {
-      await updateCourse({ id, data }).unwrap();
-      toast("Course updated successfully");
+      const formData = new FormData();
+      formData.append("courseData", JSON.stringify(data));
+      if (thumbnail) {
+        formData.append("thumbnail", thumbnail);
+      }
+
+      await updateCourse({ id, data: formData }).unwrap();
+      toast.success("Course updated successfully");
+      setThumbnail(null);
+      setThumbnailPreview(courseData?.data.thumbnail.url || null);
     } catch (error) {
-      toast("Failed to update course");
+      console.error("Failed to update course", error);
+      toast.error("Failed to update course");
     } finally {
       setIsSubmitting(false);
     }
@@ -134,8 +172,7 @@ const EditCourse = () => {
   }
 
   return (
-    <section className='py-12 md:py-20 w-full bg-white relative'>
-      {/* Teal Glow Background */}
+    <section className='py-12 md:py-20 w-full bg-white relative min-h-screen'>
       <div
         className='absolute inset-0 z-0'
         style={{
@@ -232,44 +269,35 @@ const EditCourse = () => {
               {/* Thumbnail */}
               <div className='space-y-2'>
                 <Label className='text-gray-600'>Thumbnail</Label>
-                <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
-                  <div>
-                    <Controller
-                      name='thumbnail.public_id'
-                      control={control}
-                      render={({ field }) => (
-                        <Input
-                          {...field}
-                          placeholder='Thumbnail Public ID'
-                          className='border-[#3DB6A6] focus:ring-[#3DB6A6]'
-                        />
-                      )}
-                    />
-                    {errors.thumbnail?.public_id && (
-                      <p className='text-red-500 text-sm'>
-                        {errors.thumbnail.public_id.message}
-                      </p>
-                    )}
-                  </div>
-                  <div>
-                    <Controller
-                      name='thumbnail.url'
-                      control={control}
-                      render={({ field }) => (
-                        <Input
-                          {...field}
-                          placeholder='Thumbnail URL'
-                          className='border-[#3DB6A6] focus:ring-[#3DB6A6]'
-                        />
-                      )}
-                    />
-                    {errors.thumbnail?.url && (
-                      <p className='text-red-500 text-sm'>
-                        {errors.thumbnail.url.message}
-                      </p>
-                    )}
-                  </div>
+                <div
+                  {...getRootProps()}
+                  className='border-2 border-dashed border-gray-300 p-6 rounded-md cursor-pointer text-center bg-white'>
+                  <input disabled={isSubmitting} {...getInputProps()} />
+                  {isDragActive ? (
+                    <p className='text-gray-500'>Drop the thumbnail here...</p>
+                  ) : (
+                    <p className='text-gray-500'>
+                      Drag & drop a new thumbnail (max 10 MB) here, or click to
+                      select
+                    </p>
+                  )}
                 </div>
+                {thumbnailPreview && (
+                  <div className='relative group mt-4'>
+                    <img
+                      src={thumbnailPreview}
+                      alt='thumbnail-preview'
+                      className='w-full h-28 object-cover rounded'
+                    />
+                    <button
+                      disabled={isSubmitting}
+                      type='button'
+                      onClick={removeThumbnail}
+                      className='absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-80 hover:opacity-100'>
+                      ✕
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Modules */}
@@ -374,7 +402,7 @@ const EditCourse = () => {
   );
 };
 
-// Component to handle lecture fields
+// LectureFields component
 const LectureFields = ({
   control,
   moduleIndex,
@@ -485,7 +513,7 @@ const LectureFields = ({
   );
 };
 
-// Component to handle PDF notes fields
+// PdfNotesFields component
 const PdfNotesFields = ({
   control,
   moduleIndex,

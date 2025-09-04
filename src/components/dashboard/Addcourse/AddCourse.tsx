@@ -9,11 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-// import { toast } from "@/components/ui/use-toast";
-import { useState } from "react";
-import { useCreateCourseMutation } from "@/redux/features/course/courseApi";
 import { toast } from "sonner";
+import { useState, useCallback } from "react";
+import { useDropzone } from "react-dropzone";
+import { useCreateCourseMutation } from "@/redux/features/course/courseApi";
 
 // Define validation schema with Zod
 const lectureSchema = z.object({
@@ -37,18 +36,15 @@ const courseSchema = z.object({
   title: z.string().min(1, "Course title is required"),
   description: z.string().min(1, "Course description is required"),
   price: z.number().min(0, "Price cannot be negative"),
-  thumbnail: z.object({
-    public_id: z.string().min(1, "Thumbnail public ID is required"),
-    url: z.string().url("Invalid thumbnail URL"),
-  }),
   modules: z.array(moduleSchema),
 });
 
-// Infer form type from schema
 type CourseFormData = z.infer<typeof courseSchema>;
 
 const AddCourse = () => {
   const [createCourse, { isLoading }] = useCreateCourseMutation();
+  const [thumbnail, setThumbnail] = useState<File | null>(null);
+  const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
@@ -62,7 +58,6 @@ const AddCourse = () => {
       title: "",
       description: "",
       price: 0,
-      thumbnail: { public_id: "", url: "" },
       modules: [],
     },
   });
@@ -76,22 +71,65 @@ const AddCourse = () => {
     name: "modules",
   });
 
+  // Handle thumbnail drop
+  const onDrop = useCallback((acceptedFiles: File[], rejectedFiles: File[]) => {
+    if (rejectedFiles.length > 0) {
+      const error = rejectedFiles[0].errors[0];
+      if (error.code === "file-too-large") {
+        toast.error("Image size exceeds 10 MB. Please upload a smaller image.");
+      } else {
+        toast.error("Invalid file. Please upload a valid image.");
+      }
+      return;
+    }
+    if (acceptedFiles.length > 0) {
+      const file = acceptedFiles[0]; // Only take the first file
+      setThumbnail(file);
+      setThumbnailPreview(URL.createObjectURL(file));
+    }
+  }, []);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: { "image/*": [] },
+    multiple: false, // Allow only one file
+    maxSize: 10 * 1024 * 1024, // 10 MB in bytes
+  });
+
+  // Remove thumbnail
+  const removeThumbnail = () => {
+    setThumbnail(null);
+    setThumbnailPreview(null);
+  };
+
+  // Handle form submission
   const onSubmit = async (data: CourseFormData) => {
+    if (!thumbnail) {
+      toast.error("Please upload a thumbnail");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      await createCourse(data).unwrap();
-      toast("Course created successfully");
+      const formData = new FormData();
+      formData.append("courseData", JSON.stringify(data));
+      formData.append("thumbnail", thumbnail);
+
+      await createCourse(formData).unwrap();
+      toast.success("Course created successfully");
       reset();
+      setThumbnail(null);
+      setThumbnailPreview(null);
     } catch (error) {
-      toast("Failed to create course");
+      console.error("Failed to create course", error);
+      toast.error("Failed to create course");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <section className='py-12 md:py-20 w-full bg-white relative min-h-screen' >
-      {/* Teal Glow Background */}
+    <section className='py-12 md:py-20 w-full bg-white relative min-h-screen'>
       <div
         className='absolute inset-0 z-0'
         style={{
@@ -101,7 +139,7 @@ const AddCourse = () => {
           backgroundSize: "100% 100%",
         }}
       />
-      <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 z-10 relative' >
+      <div className='max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 z-10 relative'>
         <Card className='bg-white shadow-lg rounded-lg'>
           <CardHeader>
             <CardTitle
@@ -174,9 +212,7 @@ const AddCourse = () => {
                       type='number'
                       placeholder='Enter course price'
                       className='border-[#3DB6A6] focus:ring-[#3DB6A6]'
-                      onChange={(e) =>
-                        field.onChange(parseFloat(e.target.value))
-                      }
+                      onChange={(e) => field.onChange(parseFloat(e.target.value))}
                     />
                   )}
                 />
@@ -188,44 +224,34 @@ const AddCourse = () => {
               {/* Thumbnail */}
               <div className='space-y-2'>
                 <Label className='text-gray-600'>Thumbnail</Label>
-                <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
-                  <div>
-                    <Controller
-                      name='thumbnail.public_id'
-                      control={control}
-                      render={({ field }) => (
-                        <Input
-                          {...field}
-                          placeholder='Thumbnail Public ID'
-                          className='border-[#3DB6A6] focus:ring-[#3DB6A6]'
-                        />
-                      )}
-                    />
-                    {errors.thumbnail?.public_id && (
-                      <p className='text-red-500 text-sm'>
-                        {errors.thumbnail.public_id.message}
-                      </p>
-                    )}
-                  </div>
-                  <div>
-                    <Controller
-                      name='thumbnail.url'
-                      control={control}
-                      render={({ field }) => (
-                        <Input
-                          {...field}
-                          placeholder='Thumbnail URL'
-                          className='border-[#3DB6A6] focus:ring-[#3DB6A6]'
-                        />
-                      )}
-                    />
-                    {errors.thumbnail?.url && (
-                      <p className='text-red-500 text-sm'>
-                        {errors.thumbnail.url.message}
-                      </p>
-                    )}
-                  </div>
+                <div
+                  {...getRootProps()}
+                  className='border-2 border-dashed border-gray-300 p-6 rounded-md cursor-pointer text-center bg-white'>
+                  <input disabled={isSubmitting} {...getInputProps()} />
+                  {isDragActive ? (
+                    <p className='text-gray-500'>Drop the thumbnail here...</p>
+                  ) : (
+                    <p className='text-gray-500'>
+                      Drag & drop a thumbnail (max 10 MB) here, or click to select
+                    </p>
+                  )}
                 </div>
+                {thumbnailPreview && (
+                  <div className='relative group mt-4'>
+                    <img
+                      src={thumbnailPreview}
+                      alt='thumbnail-preview'
+                      className='w-full h-28 object-cover rounded'
+                    />
+                    <button
+                      disabled={isSubmitting}
+                      type='button'
+                      onClick={removeThumbnail}
+                      className='absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-80 hover:opacity-100'>
+                      ✕
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Modules */}
@@ -276,9 +302,7 @@ const AddCourse = () => {
                               type='number'
                               placeholder='Module Number'
                               className='border-[#3DB6A6] focus:ring-[#3DB6A6]'
-                              onChange={(e) =>
-                                field.onChange(parseInt(e.target.value))
-                              }
+                              onChange={(e) => field.onChange(parseInt(e.target.value))}
                             />
                           )}
                         />
@@ -330,7 +354,7 @@ const AddCourse = () => {
   );
 };
 
-// Component to handle lecture fields
+// LectureFields component
 const LectureFields = ({
   control,
   moduleIndex,
@@ -380,13 +404,9 @@ const LectureFields = ({
                   />
                 )}
               />
-              {errors.modules?.[moduleIndex]?.lectures?.[lectureIndex]
-                ?.title && (
+              {errors.modules?.[moduleIndex]?.lectures?.[lectureIndex]?.title && (
                 <p className='text-red-500 text-sm'>
-                  {
-                    errors.modules[moduleIndex].lectures[lectureIndex].title
-                      .message
-                  }
+                  {errors.modules[moduleIndex].lectures[lectureIndex].title.message}
                 </p>
               )}
             </div>
@@ -403,13 +423,9 @@ const LectureFields = ({
                   />
                 )}
               />
-              {errors.modules?.[moduleIndex]?.lectures?.[lectureIndex]
-                ?.videoUrl && (
+              {errors.modules?.[moduleIndex]?.lectures?.[lectureIndex]?.videoUrl && (
                 <p className='text-red-500 text-sm'>
-                  {
-                    errors.modules[moduleIndex].lectures[lectureIndex].videoUrl
-                      .message
-                  }
+                  {errors.modules[moduleIndex].lectures[lectureIndex].videoUrl.message}
                 </p>
               )}
             </div>
@@ -441,7 +457,7 @@ const LectureFields = ({
   );
 };
 
-// Component to handle PDF notes fields
+// PdfNotesFields component
 const PdfNotesFields = ({
   control,
   moduleIndex,
@@ -479,14 +495,9 @@ const PdfNotesFields = ({
                 />
               )}
             />
-            {errors.modules?.[moduleIndex]?.lectures?.[lectureIndex]
-              ?.pdfNotes?.[pdfNoteIndex]?.public_id && (
+            {errors.modules?.[moduleIndex]?.lectures?.[lectureIndex]?.pdfNotes?.[pdfNoteIndex]?.public_id && (
               <p className='text-red-500 text-sm'>
-                {
-                  errors.modules[moduleIndex].lectures[lectureIndex].pdfNotes[
-                    pdfNoteIndex
-                  ].public_id.message
-                }
+                {errors.modules[moduleIndex].lectures[lectureIndex].pdfNotes[pdfNoteIndex].public_id.message}
               </p>
             )}
           </div>
@@ -502,14 +513,9 @@ const PdfNotesFields = ({
                 />
               )}
             />
-            {errors.modules?.[moduleIndex]?.lectures?.[lectureIndex]
-              ?.pdfNotes?.[pdfNoteIndex]?.url && (
+            {errors.modules?.[moduleIndex]?.lectures?.[lectureIndex]?.pdfNotes?.[pdfNoteIndex]?.url && (
               <p className='text-red-500 text-sm'>
-                {
-                  errors.modules[moduleIndex].lectures[lectureIndex].pdfNotes[
-                    pdfNoteIndex
-                  ].url.message
-                }
+                {errors.modules[moduleIndex].lectures[lectureIndex].pdfNotes[pdfNoteIndex].url.message}
               </p>
             )}
           </div>

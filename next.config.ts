@@ -5,6 +5,7 @@ const nextConfig = {
       "bairesdev.mo.cloudinary.net",
       "example.com",
       "www.tutorialrepublic.com",
+      "res.cloudinary.com",
     ],
   },
 };

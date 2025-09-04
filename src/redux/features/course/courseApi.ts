@@ -5,84 +5,18 @@ import baseApi from "@/redux/baseApi";
 import { tagTypes } from "@/redux/tag-types";
 
 
-interface CreateCourseInput {
-  title: string;
-  description: string;
-  price: number;
-  thumbnail: { public_id: string; url: string };
-  modules: Array<{
-    title: string;
-    moduleNumber: number;
-    lectures: Array<{
-      title: string;
-      videoUrl: string;
-      pdfNotes: Array<{ public_id: string; url: string }>;
-    }>;
-  }>;
-}
-
-interface UpdateCourseInput {
-  title?: string;
-  description?: string;
-  price?: number;
-  thumbnail?: { public_id: string; url: string };
-  modules?: Array<{
-    title?: string;
-    moduleNumber?: number;
-    lectures?: Array<{
-      title?: string;
-      videoUrl?: string;
-      pdfNotes?: Array<{ public_id: string; url: string }>;
-    }>;
-  }>;
-}
-
-interface AddModuleInput {
-  title: string;
-  moduleNumber: number;
-  lectures?: Array<{
-    title: string;
-    videoUrl: string;
-    pdfNotes: Array<{ public_id: string; url: string }>;
-  }>;
-}
-
-interface UpdateModuleInput {
-  title?: string;
-  moduleNumber?: number;
-}
-
-interface AddLectureInput {
-  title: string;
-  videoUrl: string;
-  pdfNotes: Array<{ public_id: string; url: string }>;
-}
-
-interface UpdateLectureInput {
-  title?: string;
-  videoUrl?: string;
-  pdfNotes?: Array<{ public_id: string; url: string }>;
-}
-
-interface LectureFilter {
-  courseId?: string;
-  moduleId?: string;
-  search?: string;
-}
-
 const courseApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    createCourse: builder.mutation<
-      IGenericResponse<ICourse>,
-      CreateCourseInput
-    >({
-      query: (data) => ({
+    createCourse: builder.mutation<IGenericResponse<ICourse>, FormData>({
+      query: (formData) => ({
         url: "/courses",
         method: "POST",
-        body: data,
+        body: formData,
+        contentType: "multipart/form-data",
       }),
       invalidatesTags: [tagTypes.course],
     }),
+
     getAllCourses: builder.query<IGenericResponse<ICourse[]>, void>({
       query: () => ({
         url: "/courses",
@@ -90,6 +24,7 @@ const courseApi = baseApi.injectEndpoints({
       }),
       providesTags: [tagTypes.course],
     }),
+
     getCourseById: builder.query<IGenericResponse<ICourse>, string>({
       query: (id) => ({
         url: `/courses/${id}`,
@@ -97,27 +32,31 @@ const courseApi = baseApi.injectEndpoints({
       }),
       providesTags: [tagTypes.course],
     }),
+
     updateCourse: builder.mutation<
       IGenericResponse<ICourse>,
-      { id: string; data: UpdateCourseInput }
+      { id: string; data: FormData }
     >({
       query: ({ id, data }) => ({
         url: `/courses/${id}`,
         method: "PATCH",
         body: data,
+        contentType: "multipart/form-data",
       }),
       invalidatesTags: [tagTypes.course],
     }),
+
     deleteCourse: builder.mutation<IGenericResponse<null>, string>({
       query: (id) => ({
         url: `/courses/${id}`,
         method: "DELETE",
       }),
-      invalidatesTags: [tagTypes.course, tagTypes.profile],
+      invalidatesTags: [tagTypes.course],
     }),
+
     addModule: builder.mutation<
       IGenericResponse<IModule>,
-      { courseId: string; data: AddModuleInput }
+      { courseId: string; data: Partial<IModule> }
     >({
       query: ({ courseId, data }) => ({
         url: `/courses/${courseId}/modules`,
@@ -126,9 +65,10 @@ const courseApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: [tagTypes.course],
     }),
+
     updateModule: builder.mutation<
       IGenericResponse<IModule>,
-      { courseId: string; moduleId: string; data: UpdateModuleInput }
+      { courseId: string; moduleId: string; data: Partial<IModule> }
     >({
       query: ({ courseId, moduleId, data }) => ({
         url: `/courses/${courseId}/modules/${moduleId}`,
@@ -137,6 +77,7 @@ const courseApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: [tagTypes.course],
     }),
+
     deleteModule: builder.mutation<
       IGenericResponse<null>,
       { courseId: string; moduleId: string }
@@ -145,11 +86,12 @@ const courseApi = baseApi.injectEndpoints({
         url: `/courses/${courseId}/modules/${moduleId}`,
         method: "DELETE",
       }),
-      invalidatesTags: [tagTypes.course, tagTypes.profile],
+      invalidatesTags: [tagTypes.course],
     }),
+
     addLecture: builder.mutation<
       IGenericResponse<ILecture>,
-      { courseId: string; moduleId: string; data: AddLectureInput }
+      { courseId: string; moduleId: string; data: Partial<ILecture> }
     >({
       query: ({ courseId, moduleId, data }) => ({
         url: `/courses/${courseId}/modules/${moduleId}/lectures`,
@@ -158,13 +100,14 @@ const courseApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: [tagTypes.course],
     }),
+
     updateLecture: builder.mutation<
       IGenericResponse<ILecture>,
       {
         courseId: string;
         moduleId: string;
         lectureId: string;
-        data: UpdateLectureInput;
+        data: Partial<ILecture>;
       }
     >({
       query: ({ courseId, moduleId, lectureId, data }) => ({
@@ -174,6 +117,7 @@ const courseApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: [tagTypes.course],
     }),
+
     deleteLecture: builder.mutation<
       IGenericResponse<null>,
       { courseId: string; moduleId: string; lectureId: string }
@@ -182,23 +126,29 @@ const courseApi = baseApi.injectEndpoints({
         url: `/courses/${courseId}/modules/${moduleId}/lectures/${lectureId}`,
         method: "DELETE",
       }),
-      invalidatesTags: [tagTypes.course, tagTypes.profile],
+      invalidatesTags: [tagTypes.course],
     }),
-    getLectures: builder.query<IGenericResponse<ILecture[]>, LectureFilter>({
-      query: (filter) => ({
-        url: "/lectures",
+
+    getLectures: builder.query<
+      IGenericResponse<ILecture[]>,
+      { courseId?: string; moduleId?: string; search?: string }
+    >({
+      query: (params) => ({
+        url: "/courses/lectures",
         method: "GET",
-        params: filter,
+        params,
       }),
       providesTags: [tagTypes.course],
     }),
+
     enrollInCourse: builder.mutation<IGenericResponse<IUserResponse>, string>({
-      query: (courseId) => ({
-        url: `/courses/${courseId}/enroll`,
+      query: (id) => ({
+        url: `/courses/${id}/enroll`,
         method: "POST",
       }),
-      invalidatesTags: [tagTypes.profile],
+      invalidatesTags: [tagTypes.user, tagTypes.course],
     }),
+
     markLectureComplete: builder.mutation<
       IGenericResponse<IUserResponse>,
       { courseId: string; moduleId: string; lectureId: string }
@@ -207,7 +157,7 @@ const courseApi = baseApi.injectEndpoints({
         url: `/courses/${courseId}/modules/${moduleId}/lectures/${lectureId}/complete`,
         method: "POST",
       }),
-      invalidatesTags: [tagTypes.profile],
+      invalidatesTags: [tagTypes.user, tagTypes.course],
     }),
   }),
 });
